@@ -20,9 +20,6 @@ class CustomDrawer extends StatelessWidget {
       child: SafeArea(
         child: Column(
           children: [
-            // ============================================================
-            // HEADER DEL DRAWER
-            // ============================================================
             Container(
               padding: const EdgeInsets.all(16),
               decoration: const BoxDecoration(
@@ -127,18 +124,14 @@ class CustomDrawer extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-
-            // ============================================================
-            // NAVEGACIÓN
-            // ============================================================
             Expanded(
-              child: Padding(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'NAVEGACIÓN',
+                      'NAVEGACION',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
@@ -147,8 +140,6 @@ class CustomDrawer extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-
-                    // Dashboard
                     _buildDrawerItem(
                       icon: Icons.dashboard,
                       label: 'Dashboard',
@@ -156,39 +147,33 @@ class CustomDrawer extends StatelessWidget {
                       onTap: () {
                         Navigator.pop(context);
                         if (isAdmin) {
-                          Navigator.pushReplacementNamed(
-                              context, '/admin/dashboard');
+                          Navigator.pushReplacementNamed(context, '/admin/dashboard');
                         } else {
-                          Navigator.pushReplacementNamed(
-                              context, '/employee/dashboard');
+                          Navigator.pushReplacementNamed(context, '/employee/dashboard');
                         }
                       },
                     ),
-
-                    // Perfil
                     _buildDrawerItem(
                       icon: Icons.person,
                       label: 'Perfil',
                       onTap: () {
                         Navigator.pop(context);
-                        _showProfileDialog(context, authProvider);
+                        if (isAdmin) {
+                          _showProfileDialog(context, authProvider);
+                        } else {
+                          Navigator.pushNamed(context, '/employee/profile');
+                        }
                       },
                     ),
-
-                    // Asistencia (solo empleados)
-                    if (!isAdmin)
+                    if (!isAdmin) ...[
                       _buildDrawerItem(
                         icon: Icons.fingerprint,
                         label: 'Asistencia',
                         onTap: () {
                           Navigator.pop(context);
-                          Navigator.pushReplacementNamed(
-                              context, '/employee/dashboard');
+                          Navigator.pushReplacementNamed(context, '/employee/dashboard');
                         },
                       ),
-
-                    // Historial (solo empleados)
-                    if (!isAdmin)
                       _buildDrawerItem(
                         icon: Icons.history,
                         label: 'Historial',
@@ -197,60 +182,96 @@ class CustomDrawer extends StatelessWidget {
                           Navigator.pushNamed(context, '/employee/history');
                         },
                       ),
-
-                    const Divider(height: 24),
-
-                    // Opciones de Admin
+                    ],
                     if (isAdmin) ...[
-                      _buildDrawerItem(
-                        icon: Icons.calendar_month,
-                        label: 'Calendario Laboral',
-                        onTap: () => Navigator.pop(context),
+                      const Divider(height: 24),
+                      const Text(
+                        'ADMINISTRACION',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF44474D),
+                          letterSpacing: 0.03,
+                        ),
                       ),
-                      _buildDrawerItem(
-                        icon: Icons.assessment,
-                        label: 'Reportes',
-                        onTap: () => Navigator.pop(context),
-                      ),
+                      const SizedBox(height: 8),
                       _buildDrawerItem(
                         icon: Icons.people,
                         label: 'Empleados y Roles',
                         onTap: () {
                           Navigator.pop(context);
-                          Navigator.pushReplacementNamed(
-                              context, '/admin/employees');
+                          Navigator.pushReplacementNamed(context, '/admin/employees');
+                        },
+                      ),
+                      _buildDrawerItem(
+                        icon: Icons.schedule,
+                        label: 'Gestion de Turnos',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.pushNamed(context, '/admin/shifts');
+                        },
+                      ),
+                      _buildDrawerItem(
+                        icon: Icons.assignment_ind,
+                        label: 'Asignar Turnos',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.pushNamed(context, '/admin/assign');
+                        },
+                      ),
+                      _buildDrawerItem(
+                        icon: Icons.event_note,
+                        label: 'Asignaciones del Día',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.pushNamed(context, '/admin/daily_assignments');
+                        },
+                      ),
+                      _buildDrawerItem(
+                        icon: Icons.business,
+                        label: 'Gestion de Clientes',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.pushNamed(context, '/admin/clients');
+                        },
+                      ),
+                      _buildDrawerItem(
+                        icon: Icons.event_available,
+                        label: 'Permisos',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.pushNamed(context, '/admin/permissions');
+                        },
+                      ),
+                      _buildDrawerItem(
+                        icon: Icons.assessment,
+                        label: 'Reportes',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.pushNamed(context, '/admin/reports');
+                        },
+                      ),
+                      _buildDrawerItem(
+                        icon: Icons.calendar_month,
+                        label: 'Calendario Laboral',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.pushNamed(context, '/admin/calendar');
                         },
                       ),
                       _buildDrawerItem(
                         icon: Icons.map,
                         label: 'Mapa en Tiempo Real',
-                        onTap: () => Navigator.pop(context),
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.pushNamed(context, '/admin/map');
+                        },
                       ),
-                       _buildDrawerItem(
-    icon: Icons.schedule,
-    label: 'Gestión de Turnos',
-    onTap: () {
-      Navigator.pop(context);
-      Navigator.pushNamed(context, '/admin/shifts');
-    },
-  ),
-  _buildDrawerItem(
-    icon: Icons.assignment_ind,
-    label: 'Asignar Turnos',
-    onTap: () {
-      Navigator.pop(context);
-      Navigator.pushNamed(context, '/admin/assign');
-    },
-  ),
                     ],
                   ],
                 ),
               ),
             ),
-
-            // ============================================================
-            // CERRAR SESIÓN
-            // ============================================================
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -259,7 +280,7 @@ class CustomDrawer extends StatelessWidget {
                   const SizedBox(height: 8),
                   _buildDrawerItem(
                     icon: Icons.logout,
-                    label: 'Cerrar Sesión',
+                    label: 'Cerrar Sesion',
                     isDanger: true,
                     onTap: () async {
                       final confirm = await showDialog<bool>(
@@ -268,9 +289,8 @@ class CustomDrawer extends StatelessWidget {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          title: const Text('Cerrar Sesión'),
-                          content: const Text(
-                              '¿Estás seguro que quieres cerrar sesión?'),
+                          title: const Text('Cerrar Sesion'),
+                          content: const Text('Estas seguro que quieres cerrar sesion?'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(ctx, false),
@@ -281,7 +301,7 @@ class CustomDrawer extends StatelessWidget {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.red,
                               ),
-                              child: const Text('Cerrar Sesión'),
+                              child: const Text('Cerrar Sesion'),
                             ),
                           ],
                         ),
@@ -297,7 +317,7 @@ class CustomDrawer extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Versión 2.4.0 Mobile',
+                    'Version 2.4.0 Mobile',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
@@ -313,9 +333,6 @@ class CustomDrawer extends StatelessWidget {
     );
   }
 
-  // ============================================================
-  // DIALOG DE PERFIL
-  // ============================================================
   void _showProfileDialog(BuildContext context, AuthProvider authProvider) {
     final user = authProvider.user;
     showDialog(
@@ -414,6 +431,4 @@ class CustomDrawer extends StatelessWidget {
       dense: true,
     );
   }
-
-
 }

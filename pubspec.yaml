@@ -17,14 +17,29 @@ dependencies:
   geolocator: ^14.0.3
   image_picker: ^1.0.4
   flutter_dotenv: ^5.1.0
+  image_watermark_editor: ^0.0.1
+  image: "<4.5.0"
+  http: ^1.6.0
+  excel: ^4.0.6
+  path_provider: ^2.1.6
+  share_plus: ^13.3.0
+  google_maps_flutter: ^2.10.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.1
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
   assets:
     - .env
     - assets/images/
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/images/app_icon.png"
+  adaptive_icon_background: "#0F2744"
+  adaptive_icon_foreground: "assets/images/app_icon.png"

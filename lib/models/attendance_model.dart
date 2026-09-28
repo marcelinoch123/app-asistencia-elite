@@ -11,7 +11,11 @@ class AttendanceModel {
   final int lateMinutes;
   final double lateFee;
   final int workedMinutes;
+  final int toleranceMinutesUsed;
+  final int earlyLeaveMinutes;
+  final String? shiftId;
   final DateTime createdAt;
+  final String? notes;
 
   AttendanceModel({
     required this.id,
@@ -26,7 +30,11 @@ class AttendanceModel {
     this.lateMinutes = 0,
     this.lateFee = 0.0,
     this.workedMinutes = 0,
+    this.toleranceMinutesUsed = 0,
+    this.earlyLeaveMinutes = 0,
+    this.shiftId,
     required this.createdAt,
+    this.notes,
   });
 
   factory AttendanceModel.fromMap(Map<String, dynamic> map) {
@@ -34,7 +42,6 @@ class AttendanceModel {
       id: map['id'] ?? '',
       userId: map['user_id'] ?? '',
       date: map['date'] ?? '',
-      // ✅ CONVERTIR A HORA LOCAL
       checkIn: map['check_in'] != null
           ? DateTime.parse(map['check_in']).toLocal()
           : null,
@@ -48,9 +55,13 @@ class AttendanceModel {
       lateMinutes: map['late_minutes'] ?? 0,
       lateFee: (map['late_fee'] as num?)?.toDouble() ?? 0.0,
       workedMinutes: map['worked_minutes'] ?? 0,
+      toleranceMinutesUsed: map['tolerance_minutes_used'] ?? 0,
+      earlyLeaveMinutes: map['early_leave_minutes'] ?? 0,
+      shiftId: map['shift_id'],
       createdAt: map['created_at'] != null
           ? DateTime.parse(map['created_at']).toLocal()
           : DateTime.now(),
+      notes: map['notes']?.toString(),
     );
   }
 
@@ -68,7 +79,11 @@ class AttendanceModel {
       'late_minutes': lateMinutes,
       'late_fee': lateFee,
       'worked_minutes': workedMinutes,
+      'tolerance_minutes_used': toleranceMinutesUsed,
+      'early_leave_minutes': earlyLeaveMinutes,
+      'shift_id': shiftId,
       'created_at': createdAt.toUtc().toIso8601String(),
+      'notes': notes,
     };
   }
 }

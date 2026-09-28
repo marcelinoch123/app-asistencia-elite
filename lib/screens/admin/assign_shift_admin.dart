@@ -16,13 +16,14 @@ class _AssignShiftAdminState extends State<AssignShiftAdmin> {
 
   String? _selectedShiftId;
   String? _selectedUserId;
+  String? _selectedClientId;
+  String? _selectedSupervisorId;
   DateTime _startDate = DateTime.now();
   DateTime _endDate = DateTime.now().add(const Duration(days: 7));
 
   @override
   void initState() {
     super.initState();
-    // ✅ FIX: Ejecutar después del primer build
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
     });
@@ -33,13 +34,17 @@ class _AssignShiftAdminState extends State<AssignShiftAdmin> {
     final provider = context.read<AttendanceProvider>();
     await provider.fetchShifts();
     await provider.fetchAllEmployees();
+    await provider.fetchClients();
+    await provider.fetchAssignmentHistory();
   }
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<AttendanceProvider>();
-    final shifts = provider.shifts;
-    final employees = provider.allEmployees.where((e) => !e.isAdmin).toList();
+    final prov = context.watch<AttendanceProvider>();
+    final shifts = prov.shifts;
+    final employees = prov.allEmployees.where((e) => !e.isAdmin).toList();
+    final supervisors = prov.allEmployees.where((e) => e.isAdmin || e.role == 'admin').toList();
+    final clients = prov.clients;
 
     return Scaffold(
       key: _scaffoldKey,
@@ -76,25 +81,7 @@ class _AssignShiftAdminState extends State<AssignShiftAdmin> {
             ),
             const SizedBox(height: 8),
             shifts.isEmpty
-                ? Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFEF3C7),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.warning_amber, color: Color(0xFFF59E0B)),
-                        SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'No hay turnos creados. Ve a "Gestión de Turnos" primero.',
-                            style: TextStyle(fontSize: 13),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
+                ? _buildWarning('No hay turnos creados. Ve a Gestion de Turnos primero.')
                 : Column(
                     children: shifts.map((s) {
                       final isSelected = _selectedShiftId == s['id'];
@@ -104,26 +91,18 @@ class _AssignShiftAdminState extends State<AssignShiftAdmin> {
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: isSelected
-                                ? const Color(0xFFECFDF5)
-                                : Colors.white,
+                            color: isSelected ? const Color(0xFFECFDF5) : Colors.white,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: isSelected
-                                  ? const Color(0xFF10B981)
-                                  : const Color(0xFFE6EEFF),
+                              color: isSelected ? const Color(0xFF10B981) : const Color(0xFFE6EEFF),
                               width: isSelected ? 2 : 1,
                             ),
                           ),
                           child: Row(
                             children: [
                               Icon(
-                                isSelected
-                                    ? Icons.radio_button_checked
-                                    : Icons.radio_button_unchecked,
-                                color: isSelected
-                                    ? const Color(0xFF10B981)
-                                    : const Color(0xFF74777E),
+                                isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                                color: isSelected ? const Color(0xFF10B981) : const Color(0xFF74777E),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -156,7 +135,69 @@ class _AssignShiftAdminState extends State<AssignShiftAdmin> {
                   ),
             const SizedBox(height: 24),
             const Text(
-              '2. Selecciona el empleado',
+              '2. Selecciona el cliente',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF001229),
+              ),
+            ),
+            const SizedBox(height: 8),
+            clients.isEmpty
+                ? _buildWarning('No hay clientes creados. Ve a Gestion de Clientes primero.')
+                : Column(
+                    children: clients.map((c) {
+                      final isSelected = _selectedClientId == c['id'];
+                      return GestureDetector(
+                        onTap: () => setState(() => _selectedClientId = c['id']),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: isSelected ? const Color(0xFFECFDF5) : Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isSelected ? const Color(0xFF10B981) : const Color(0xFFE6EEFF),
+                              width: isSelected ? 2 : 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                                color: isSelected ? const Color(0xFF10B981) : const Color(0xFF74777E),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      c['name'] ?? '',
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    Text(
+                                      c['service'] ?? '',
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        color: Color(0xFF0051D5),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+            const SizedBox(height: 24),
+            const Text(
+              '3. Selecciona el empleado',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
@@ -165,17 +206,7 @@ class _AssignShiftAdminState extends State<AssignShiftAdmin> {
             ),
             const SizedBox(height: 8),
             employees.isEmpty
-                ? Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFEE2E2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      'No hay empleados registrados',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                  )
+                ? _buildWarning('No hay empleados registrados')
                 : Column(
                     children: employees.map((emp) {
                       final isSelected = _selectedUserId == emp.id;
@@ -185,14 +216,10 @@ class _AssignShiftAdminState extends State<AssignShiftAdmin> {
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: isSelected
-                                ? const Color(0xFFECFDF5)
-                                : Colors.white,
+                            color: isSelected ? const Color(0xFFECFDF5) : Colors.white,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: isSelected
-                                  ? const Color(0xFF10B981)
-                                  : const Color(0xFFE6EEFF),
+                              color: isSelected ? const Color(0xFF10B981) : const Color(0xFFE6EEFF),
                               width: isSelected ? 2 : 1,
                             ),
                           ),
@@ -202,9 +229,7 @@ class _AssignShiftAdminState extends State<AssignShiftAdmin> {
                                 radius: 20,
                                 backgroundColor: const Color(0xFF0051D5),
                                 child: Text(
-                                  emp.fullName.isNotEmpty
-                                      ? emp.fullName[0].toUpperCase()
-                                      : 'E',
+                                  emp.fullName.isNotEmpty ? emp.fullName[0].toUpperCase() : 'E',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.w600,
@@ -234,8 +259,7 @@ class _AssignShiftAdminState extends State<AssignShiftAdmin> {
                                 ),
                               ),
                               if (isSelected)
-                                const Icon(Icons.check_circle,
-                                    color: Color(0xFF10B981)),
+                                const Icon(Icons.check_circle, color: Color(0xFF10B981)),
                             ],
                           ),
                         ),
@@ -244,7 +268,59 @@ class _AssignShiftAdminState extends State<AssignShiftAdmin> {
                   ),
             const SizedBox(height: 24),
             const Text(
-              '3. Selecciona el rango de fechas',
+              '4. Supervisor responsable (opcional)',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF001229),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE6EEFF)),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String?>(
+                  isExpanded: true,
+                  value: _selectedSupervisorId,
+                  hint: const Text(
+                    'Seleccionar supervisor responsable',
+                    style: TextStyle(fontSize: 13, color: Color(0xFF74777E)),
+                  ),
+                  icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF0F2744)),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('Sin supervisor asignado', style: TextStyle(color: Color(0xFF74777E), fontSize: 13)),
+                    ),
+                    ...supervisors.map((s) => DropdownMenuItem<String?>(
+                      value: s.id,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.shield_outlined, size: 18, color: Color(0xFF0051D5)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${s.fullName} (${s.email})',
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )),
+                  ],
+                  onChanged: (val) => setState(() => _selectedSupervisorId = val),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              '5. Selecciona el rango de fechas',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
@@ -292,8 +368,52 @@ class _AssignShiftAdminState extends State<AssignShiftAdmin> {
                 ),
               ),
             ),
+            const SizedBox(height: 32),
+            const Divider(color: Color(0xFFE6EEFF), thickness: 1.5),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Icon(Icons.history, color: Color(0xFF0F2744), size: 20),
+                const SizedBox(width: 8),
+                const Text(
+                  'Historial de Cambios Recientes',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF001229),
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.refresh, size: 20, color: Color(0xFF0051D5)),
+                  onPressed: () => context.read<AttendanceProvider>().fetchAssignmentHistory(),
+                  tooltip: 'Actualizar historial',
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _buildHistorySection(prov),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildWarning(String text) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF3C7),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber, color: Color(0xFFF59E0B)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text, style: const TextStyle(fontSize: 13)),
+          ),
+        ],
       ),
     );
   }
@@ -327,8 +447,7 @@ class _AssignShiftAdminState extends State<AssignShiftAdmin> {
             const SizedBox(height: 4),
             Row(
               children: [
-                const Icon(Icons.calendar_today,
-                    size: 16, color: Color(0xFF0051D5)),
+                const Icon(Icons.calendar_today, size: 16, color: Color(0xFF0051D5)),
                 const SizedBox(width: 6),
                 Text(
                   DateFormat('dd/MM/yyyy').format(date),
@@ -349,6 +468,7 @@ class _AssignShiftAdminState extends State<AssignShiftAdmin> {
   bool _canAssign() {
     return _selectedShiftId != null &&
         _selectedUserId != null &&
+        _selectedClientId != null &&
         !_endDate.isBefore(_startDate);
   }
 
@@ -374,20 +494,22 @@ class _AssignShiftAdminState extends State<AssignShiftAdmin> {
   }
 
   Future<void> _assignShift() async {
-    final provider = context.read<AttendanceProvider>();
-    final success = await provider.assignShiftToEmployee(
+    final prov = context.read<AttendanceProvider>();
+    final success = await prov.assignShiftToEmployee(
       shiftId: _selectedShiftId!,
       userId: _selectedUserId!,
       startDate: _startDate,
       endDate: _endDate,
+      clientId: _selectedClientId,
+      supervisorId: _selectedSupervisorId,
     );
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(success
-              ? '✅ Turno asignado del ${DateFormat('dd/MM').format(_startDate)} al ${DateFormat('dd/MM').format(_endDate)}'
-              : '❌ Error al asignar'),
+              ? 'Turno asignado del ${DateFormat('dd/MM').format(_startDate)} al ${DateFormat('dd/MM').format(_endDate)}'
+              : 'Error al asignar'),
           backgroundColor: success ? Colors.green : Colors.red,
           duration: const Duration(seconds: 4),
         ),
@@ -397,9 +519,172 @@ class _AssignShiftAdminState extends State<AssignShiftAdmin> {
         setState(() {
           _selectedShiftId = null;
           _selectedUserId = null;
+          _selectedClientId = null;
+          _selectedSupervisorId = null;
         });
       }
     }
+  }
+
+  Widget _buildHistorySection(AttendanceProvider prov) {
+    if (prov.isLoadingHistory) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
+    if (prov.assignmentChangeLogs.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE6EEFF)),
+        ),
+        child: const Center(
+          child: Text(
+            'No hay registros de cambios recientes.',
+            style: TextStyle(fontSize: 13, color: Color(0xFF74777E)),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: prov.assignmentChangeLogs.map((log) {
+        final changeType = log['change_type']?.toString() ?? 'updated';
+        Color badgeColor;
+        Color badgeTextColor;
+        String badgeText;
+
+        switch (changeType) {
+          case 'created':
+            badgeColor = const Color(0xFFECFDF5);
+            badgeTextColor = const Color(0xFF10B981);
+            badgeText = 'Creado';
+            break;
+          case 'deleted':
+            badgeColor = const Color(0xFFFEF2F2);
+            badgeTextColor = const Color(0xFFEF4444);
+            badgeText = 'Eliminado';
+            break;
+          case 'updated':
+          default:
+            badgeColor = const Color(0xFFEFF6FF);
+            badgeTextColor = const Color(0xFF3B82F6);
+            badgeText = 'Modificado';
+            break;
+        }
+
+        String formattedDate = '--';
+        if (log['changed_at'] != null) {
+          try {
+            final parsed = DateTime.parse(log['changed_at'].toString()).toLocal();
+            formattedDate = DateFormat('dd/MM/yyyy HH:mm').format(parsed);
+          } catch (_) {}
+        }
+
+        final userName = log['user_name'] ?? 'Empleado';
+        final adminName = log['admin_name'] ?? 'Administrador';
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE6EEFF)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.access_time, size: 14, color: Color(0xFF74777E)),
+                      const SizedBox(width: 4),
+                      Text(
+                        formattedDate,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF74777E),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: badgeColor,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      badgeText,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: badgeTextColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.person_outline, size: 16, color: Color(0xFF0F2744)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Empleado: ',
+                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  ),
+                  Expanded(
+                    child: Text(
+                      userName,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF001229),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Icon(Icons.admin_panel_settings_outlined, size: 16, color: Color(0xFF0051D5)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Por: ',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                  Expanded(
+                    child: Text(
+                      adminName,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF0051D5),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
   }
 
   String _formatTime(dynamic time) {

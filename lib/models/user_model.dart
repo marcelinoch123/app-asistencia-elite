@@ -5,6 +5,11 @@ class UserModel {
   final String role;
   final String department;
   final String? phone;
+  final String? address;
+  final String? photoUrl;
+  final String? clientId;
+  final String? service;
+  final String employeeType;
   final bool isActive;
   final DateTime createdAt;
 
@@ -15,21 +20,31 @@ class UserModel {
     required this.role,
     this.department = 'General',
     this.phone,
+    this.address,
+    this.photoUrl,
+    this.clientId,
+    this.service,
+    this.employeeType = 'field',
     this.isActive = true,
     required this.createdAt,
   });
 
   factory UserModel.fromMap(Map<String, dynamic> map) {
     return UserModel(
-      id: map['id'] ?? '',
-      email: map['email'] ?? '',
-      fullName: map['full_name'] ?? map['name'] ?? 'Usuario',
-      role: map['role'] ?? 'employee',
-      department: map['department'] ?? 'General',
-      phone: map['phone'],
-      isActive: map['is_active'] ?? true,
+      id: map['id']?.toString() ?? '',
+      email: map['email']?.toString() ?? '',
+      fullName: map['full_name']?.toString() ?? map['name']?.toString() ?? 'Usuario',
+      role: map['role']?.toString() ?? 'employee',
+      department: map['department']?.toString() ?? 'General',
+      phone: map['phone']?.toString(),
+      address: map['address']?.toString(),
+      photoUrl: map['photo_url']?.toString(),
+      clientId: map['client_id']?.toString(),
+      service: map['service']?.toString(),
+      employeeType: map['employee_type']?.toString() ?? 'field',
+      isActive: map['is_active'] is bool ? map['is_active'] : true,
       createdAt: map['created_at'] != null
-          ? DateTime.parse(map['created_at'])
+          ? DateTime.tryParse(map['created_at'].toString()) ?? DateTime.now()
           : DateTime.now(),
     );
   }
@@ -43,6 +58,11 @@ class UserModel {
       'role': role,
       'department': department,
       'phone': phone,
+      'address': address,
+      'photo_url': photoUrl,
+      'client_id': clientId,
+      'service': service,
+      'employee_type': employeeType,
       'is_active': isActive,
       'created_at': createdAt.toIso8601String(),
     };
@@ -50,7 +70,9 @@ class UserModel {
 
   bool get isAdmin => role == 'admin';
   bool get isEmployee => role == 'employee';
-  
+  bool get isField => employeeType == 'field';
+  bool get isOffice => employeeType == 'office';
+
   String get roleDisplay {
     switch (role) {
       case 'admin':

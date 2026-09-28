@@ -73,6 +73,31 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  void updateUserLocally({
+    String? fullName,
+    String? phone,
+    String? address,
+    String? photoUrl,
+  }) {
+    if (_currentUser == null) return;
+    _currentUser = UserModel(
+      id: _currentUser!.id,
+      email: _currentUser!.email,
+      fullName: fullName ?? _currentUser!.fullName,
+      role: _currentUser!.role,
+      department: _currentUser!.department,
+      phone: phone ?? _currentUser!.phone,
+      address: address ?? _currentUser!.address,
+      photoUrl: photoUrl ?? _currentUser!.photoUrl,
+      clientId: _currentUser!.clientId,
+      service: _currentUser!.service,
+      employeeType: _currentUser!.employeeType,
+      isActive: _currentUser!.isActive,
+      createdAt: _currentUser!.createdAt,
+    );
+    notifyListeners();
+  }
+
   Future<void> signOut() async {
     await _supabase.auth.signOut();
     _currentUser = null;

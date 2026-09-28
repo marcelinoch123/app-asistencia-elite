@@ -25,7 +25,13 @@ class _HistoryEmployeeState extends State<HistoryEmployee> {
     final authProvider = context.read<AuthProvider>();
     final attendanceProvider = context.read<AttendanceProvider>();
     if (authProvider.user != null) {
+      final now = DateTime.now();
       await attendanceProvider.fetchAttendances(authProvider.user!.id);
+      await attendanceProvider.countAbsences(
+        authProvider.user!.id,
+        now.month,
+        now.year,
+      );
     }
   }
 
@@ -41,7 +47,7 @@ class _HistoryEmployeeState extends State<HistoryEmployee> {
     final tardanzas = attendances
         .where((a) => a.status == 'late' || a.status == 'very_late')
         .length;
-    final faltas = attendances.where((a) => a.status == 'absent').length;
+    final faltas = attendanceProvider.currentMonthAbsences;
 
     return Scaffold(
       key: _scaffoldKey,

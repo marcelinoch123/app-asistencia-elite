@@ -42,9 +42,7 @@ class _DashboardAdminState extends State<DashboardAdmin> {
         setState(() => _currentNavIndex = 0);
         break;
       case 2:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Reportes - Próximamente')),
-        );
+        Navigator.pushNamed(context, '/admin/reports');
         setState(() => _currentNavIndex = 0);
         break;
       case 3:
@@ -230,11 +228,7 @@ class _DashboardAdminState extends State<DashboardAdmin> {
                     title: 'Reportes',
                     subtitle: 'Ver asistencias y métricas',
                     color: const Color(0xFFF59E0B),
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Reportes - Próximamente')),
-                      );
-                    },
+                    onTap: () => Navigator.pushNamed(context, '/admin/reports'),
                   ),
                   const SizedBox(height: 20),
                   const Text(

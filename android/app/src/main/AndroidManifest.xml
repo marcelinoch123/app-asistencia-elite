@@ -14,10 +14,17 @@
     <!-- APLICACIÓN PRINCIPAL                         -->
     <!-- ============================================ -->
     <application
-        android:label="app_asistencia_elite"
+        android:label="Asistencia Elite Multiservicios SRL"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
+        
+        <!-- ========================================== -->
+        <!-- GOOGLE MAPS API KEY                        -->
+        <!-- ========================================== -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${MAPS_API_KEY}" />
         
         <!-- ========================================== -->
         <!-- ACTIVITY PRINCIPAL                        -->

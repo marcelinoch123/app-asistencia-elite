@@ -93,15 +93,22 @@ class LocationProvider extends ChangeNotifier {
   void startTracking(String userId) {
     if (_isTracking) return;
 
+    final currentUser = _supabase.auth.currentUser;
+    if (currentUser == null) {
+      print('⚠️ No se puede iniciar rastreo: no hay usuario autenticado en Supabase');
+      return;
+    }
+
     _isTracking = true;
-    print('📍 Iniciando rastreo continuo para: $userId');
+    final uid = currentUser.id;
+    print('📍 Iniciando rastreo continuo para: $uid');
 
     // Enviar ubicación inmediatamente
-    _updateLocationInSupabase(userId);
+    _updateLocationInSupabase(uid);
 
     // Actualizar cada 30 segundos
     _locationTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      _updateLocationInSupabase(userId);
+      _updateLocationInSupabase(uid);
     });
 
     notifyListeners();
@@ -123,18 +130,56 @@ class LocationProvider extends ChangeNotifier {
   // ============================================================
   Future<void> _updateLocationInSupabase(String userId) async {
     try {
+      final currentUser = _supabase.auth.currentUser;
+      if (currentUser == null) {
+        print('⚠️ No hay sesión activa en Supabase Auth, deteniendo rastreo');
+        stopTracking();
+        return;
+      }
+
+      final uid = currentUser.id;
+
       final position = await getCurrentLocation();
       if (position == null) return;
 
-      // ✅ GUARDAR EN TABLA live_locations
-      await _supabase.from('live_locations').upsert({
-        'user_id': userId,
+      final nowUtc = DateTime.now().toUtc().toIso8601String();
+      final data = {
+        'user_id': uid,
         'lat': position.latitude,
         'lng': position.longitude,
-        'last_update': DateTime.now().toUtc().toIso8601String(),
-      }, onConflict: 'user_id');
+        'last_update': nowUtc,
+      };
 
-      print('✅ Ubicación guardada en Supabase');
+      // 1. Intentar con upsert especificando onConflict: 'user_id'
+      try {
+        await _supabase.from('live_locations').upsert(
+          data,
+          onConflict: 'user_id',
+        );
+        print('✅ Ubicación guardada en Supabase (upsert)');
+        return;
+      } catch (upsertError) {
+        print('⚠️ Upsert en live_locations falló ($upsertError), intentando update/insert...');
+      }
+
+      // 2. Fallback a UPDATE directo si RLS bloquea el ON CONFLICT DO UPDATE
+      final updateRes = await _supabase
+          .from('live_locations')
+          .update({
+            'lat': position.latitude,
+            'lng': position.longitude,
+            'last_update': nowUtc,
+          })
+          .eq('user_id', uid)
+          .select();
+
+      if (updateRes.isEmpty) {
+        // 3. Si no existía fila previa, realizar INSERT directo
+        await _supabase.from('live_locations').insert(data);
+        print('✅ Ubicación guardada en Supabase (insert)');
+      } else {
+        print('✅ Ubicación guardada en Supabase (update)');
+      }
     } catch (e) {
       print('❌ Error guardando ubicación: $e');
     }
