@@ -1,11 +1,10 @@
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import '../config/supabase_client.dart';
 import '../models/attendance_model.dart';
 import '../models/user_model.dart';
+import '../services/storage_service.dart';
 
 class AttendanceProvider extends ChangeNotifier {
   final SupabaseClient _supabase = SupabaseConfig.client;
@@ -44,10 +43,12 @@ class AttendanceProvider extends ChangeNotifier {
   double? _officeLat;
   double? _officeLng;
   int _officeRadius = 500;
+  int _minMinutesBeforeCheckout = 4;
 
   double? get officeLat => _officeLat;
   double? get officeLng => _officeLng;
   int get officeRadius => _officeRadius;
+  int get minMinutesBeforeCheckout => _minMinutesBeforeCheckout;
 
   SupabaseClient get supabaseClient => _supabase;
 
@@ -721,7 +722,13 @@ class AttendanceProvider extends ChangeNotifier {
   }
 }
 
-  Future<bool> checkOut(String userId, String shiftId, {String? notes}) async {
+  Future<bool> checkOut(
+    String userId,
+    String shiftId, {
+    dynamic photo,
+    bool isOffice = false,
+    String? notes,
+  }) async {
     _isLoading = true;
     notifyListeners();
 
@@ -745,12 +752,6 @@ class AttendanceProvider extends ChangeNotifier {
         return false;
       }
 
-      final attendanceId = existing['id'] as String;
-      final checkInUtc = DateTime.parse(existing['check_in']).toUtc();
-      final checkOutUtc = DateTime.now().toUtc();
-      final workedMinutes = checkOutUtc.difference(checkInUtc).inMinutes;
-      final checkOutStr = DateTime.now().toUtc().toIso8601String();
-
       // Consultar turno asignado para verificar hora de fin
       Map<String, dynamic>? shift;
       try {
@@ -762,6 +763,82 @@ class AttendanceProvider extends ChangeNotifier {
       } catch (e) {
         print('Error buscando turno en checkOut: $e');
       }
+
+      // Reglas para empleados de campo (isOffice == false)
+      final boliviaNow = DateTime.now().toUtc().subtract(const Duration(hours: 4));
+
+      if (!isOffice && shift != null && shift['end_time'] != null) {
+        final dateStr = existing['date'] as String? ?? today;
+        final dateParts = dateStr.split('-');
+        final shiftYear = int.parse(dateParts[0]);
+        final shiftMonth = int.parse(dateParts[1]);
+        final shiftDay = int.parse(dateParts[2]);
+
+        final endParts = (shift['end_time'] as String).split(':');
+        final endHour = int.parse(endParts[0]);
+        final endMinute = int.parse(endParts[1]);
+
+        DateTime scheduledEndBolivia = DateTime(
+          shiftYear,
+          shiftMonth,
+          shiftDay,
+          endHour,
+          endMinute,
+        );
+
+        if (shift['start_time'] != null) {
+          final startParts = (shift['start_time'] as String).split(':');
+          final startHour = int.parse(startParts[0]);
+          final startMinute = int.parse(startParts[1]);
+          if (endHour < startHour || (endHour == startHour && endMinute < startMinute)) {
+            scheduledEndBolivia = scheduledEndBolivia.add(const Duration(days: 1));
+          }
+        }
+
+        final earliestAllowed = scheduledEndBolivia.subtract(
+          Duration(minutes: _minMinutesBeforeCheckout),
+        );
+
+        if (boliviaNow.isBefore(earliestAllowed)) {
+          final hh = earliestAllowed.hour.toString().padLeft(2, '0');
+          final mm = earliestAllowed.minute.toString().padLeft(2, '0');
+          _error = 'Debes esperar hasta las $hh:$mm para finalizar';
+          _isLoading = false;
+          notifyListeners();
+          return false;
+        }
+
+        // Foto obligatoria al finalizar para empleados de campo
+        if (photo == null) {
+          _error = 'Debes tomar una foto para finalizar';
+          _isLoading = false;
+          notifyListeners();
+          return false;
+        }
+      }
+
+      String? checkOutPhotoUrl;
+      if (photo != null) {
+        Uint8List? bytes;
+        if (photo is Uint8List) {
+          bytes = photo;
+        } else {
+          try {
+            bytes = await (photo as dynamic).readAsBytes();
+          } catch (e) {
+            print('Error leyendo bytes de foto: $e');
+          }
+        }
+        if (bytes != null) {
+          checkOutPhotoUrl = await _uploadPhotoBytes(bytes, userId);
+        }
+      }
+
+      final attendanceId = existing['id'] as String;
+      final checkInUtc = DateTime.parse(existing['check_in']).toUtc();
+      final checkOutUtc = DateTime.now().toUtc();
+      final workedMinutes = checkOutUtc.difference(checkInUtc).inMinutes;
+      final checkOutStr = DateTime.now().toUtc().toIso8601String();
 
       int earlyLeaveMinutes = 0;
       if (shift != null && shift['end_time'] != null) {
@@ -775,8 +852,6 @@ class AttendanceProvider extends ChangeNotifier {
         final endHour = int.parse(endParts[0]);
         final endMinute = int.parse(endParts[1]);
 
-        // Los turnos en Supabase están en hora local de Bolivia (UTC-4).
-        // Convertimos a UTC sumando 4 horas para una comparación exacta independiente de la zona horaria del dispositivo.
         DateTime shiftEndUtc = DateTime.utc(
           shiftYear,
           shiftMonth,
@@ -785,7 +860,6 @@ class AttendanceProvider extends ChangeNotifier {
           endMinute,
         ).add(const Duration(hours: 4));
 
-        // Si el turno cruza la medianoche (ej. 22:00 a 06:00), shiftEnd es al día siguiente
         if (shift['start_time'] != null) {
           final startParts = (shift['start_time'] as String).split(':');
           final startHour = int.parse(startParts[0]);
@@ -803,7 +877,6 @@ class AttendanceProvider extends ChangeNotifier {
           }
         }
 
-        // Reglas 7 y 8: Salida anticipada comparando en UTC truncado a minutos
         final checkOutMinuteUtc = DateTime.utc(
           checkOutUtc.year,
           checkOutUtc.month,
@@ -821,9 +894,15 @@ class AttendanceProvider extends ChangeNotifier {
 
       final Map<String, dynamic> updateData = {
         'check_out': checkOutStr,
-        'worked_minutes': workedMinutes,
+        'worked_minutes': workedMinutes > 0 ? workedMinutes : 0,
         'early_leave_minutes': earlyLeaveMinutes,
+        'auto_check_out': false,
+        'check_out_photo_missing': !isOffice && (checkOutPhotoUrl == null || checkOutPhotoUrl.isEmpty),
       };
+
+      if (checkOutPhotoUrl != null) {
+        updateData['check_out_photo_url'] = checkOutPhotoUrl;
+      }
 
       if (notes != null && notes.trim().isNotEmpty) {
         final existingNotes = existing['notes'] as String?;
@@ -859,6 +938,86 @@ class AttendanceProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return false;
+    }
+  }
+
+  Future<void> autoCheckOutExpiredShifts({String? userId}) async {
+    try {
+      final boliviaNow = DateTime.now().toUtc().subtract(const Duration(hours: 4));
+      final todayStr =
+          '${boliviaNow.year.toString().padLeft(4, '0')}-${boliviaNow.month.toString().padLeft(2, '0')}-${boliviaNow.day.toString().padLeft(2, '0')}';
+
+      // 1. Buscar asistencias de HOY con check_in pero SIN check_out
+      var query = _supabase
+          .from('attendances')
+          .select('id, user_id, shift_id, date, check_in, check_out')
+          .eq('date', todayStr)
+          .not('check_in', 'is', null)
+          .filter('check_out', 'is', null);
+
+      if (userId != null && userId.isNotEmpty) {
+        query = query.eq('user_id', userId);
+      }
+
+      final pendingAttendances = await query;
+      if (pendingAttendances.isEmpty) return;
+
+      // 2. Consultar turnos
+      final shiftsResponse = await _supabase
+          .from('shifts')
+          .select('id, name, start_time, end_time');
+      final Map<String, Map<String, dynamic>> shiftsMap = {
+        for (final s in shiftsResponse) s['id']?.toString() ?? '': s
+      };
+
+      for (final att in pendingAttendances) {
+        final shiftId = att['shift_id']?.toString();
+        if (shiftId == null) continue;
+        final shift = shiftsMap[shiftId];
+        if (shift == null || shift['end_time'] == null) continue;
+
+        final endParts = (shift['end_time'] as String).split(':');
+        if (endParts.length < 2) continue;
+        final endH = int.tryParse(endParts[0]) ?? 0;
+        final endM = int.tryParse(endParts[1]) ?? 0;
+
+        DateTime scheduledEndBolivia = DateTime(
+          boliviaNow.year,
+          boliviaNow.month,
+          boliviaNow.day,
+          endH,
+          endM,
+        );
+
+        if (shift['start_time'] != null) {
+          final startParts = (shift['start_time'] as String).split(':');
+          final startH = int.tryParse(startParts[0]) ?? 0;
+          final startM = int.tryParse(startParts[1]) ?? 0;
+          if (endH < startH || (endH == startH && endM < startM)) {
+            scheduledEndBolivia = scheduledEndBolivia.add(const Duration(days: 1));
+          }
+        }
+
+        // Si la hora actual en Bolivia > end_time + 5 min de gracia
+        final graceThreshold = scheduledEndBolivia.add(const Duration(minutes: 5));
+        if (boliviaNow.isAfter(graceThreshold)) {
+          // Programar fin de turno en UTC (Bolivia + 4h)
+          final checkOutUtc = scheduledEndBolivia.add(const Duration(hours: 4));
+          final checkInUtc = DateTime.parse(att['check_in'].toString()).toUtc();
+          final diff = checkOutUtc.difference(checkInUtc).inMinutes;
+          final workedMinutes = diff > 0 ? diff : 0;
+
+          await _supabase.from('attendances').update({
+            'check_out': checkOutUtc.toIso8601String(),
+            'worked_minutes': workedMinutes,
+            'early_leave_minutes': 0,
+            'auto_check_out': true,
+            'check_out_photo_missing': true,
+          }).eq('id', att['id']);
+        }
+      }
+    } catch (e) {
+      print('Error en autoCheckOutExpiredShifts: $e');
     }
   }
 
@@ -917,36 +1076,187 @@ class AttendanceProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> addEmployee(UserModel employee) async {
+  Future<bool> verifyAdminPassword(String password) async {
+    final currentUser = _supabase.auth.currentUser;
+    if (currentUser == null || currentUser.email == null) {
+      _error = 'No hay sesión de administrador activa';
+      return false;
+    }
     try {
-      final tempPassword = 'Temp123!';
-      final authResponse = await _supabase.auth.signUp(
-        email: employee.email,
-        password: tempPassword,
+      final response = await _supabase.auth.signInWithPassword(
+        email: currentUser.email!,
+        password: password,
       );
+      return response.user != null;
+    } catch (e) {
+      _error = 'Contraseña incorrecta';
+      return false;
+    }
+  }
 
-      if (authResponse.user == null) {
-        throw Exception('No se pudo crear el usuario');
-      }
-
-      await _supabase.from('users').insert({
-        'id': authResponse.user!.id,
-        'email': employee.email,
-        'name': employee.fullName,
-        'full_name': employee.fullName,
-        'role': employee.role,
-        'department': employee.department,
-        'phone': employee.phone,
-        'is_active': employee.isActive,
-      });
+  Future<bool> terminateEmployee({
+    required String userId,
+    String? reason,
+  }) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final now = DateTime.now().toUtc().toIso8601String();
+      await _supabase.from('users').update({
+        'status': 'inactive',
+        'is_active': false,
+        'termination_date': now,
+        'termination_reason': (reason != null && reason.trim().isNotEmpty) ? reason.trim() : null,
+      }).eq('id', userId);
 
       await fetchAllEmployees();
+      _isLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
-      _error = 'Error al agregar empleado: $e';
+      _error = 'Error al dar de baja al empleado: $e';
+      _isLoading = false;
       notifyListeners();
       return false;
+    }
+  }
+
+  Future<bool> reactivateEmployee(String userId) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _supabase.from('users').update({
+        'status': 'active',
+        'is_active': true,
+        'termination_date': null,
+        'termination_reason': null,
+      }).eq('id', userId);
+
+      await fetchAllEmployees();
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = 'Error al reactivar empleado: $e';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> deleteEmployee(String userId, {String? contractPath}) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      // 1. Eliminar contrato de Storage si existe
+      if (contractPath != null && contractPath.isNotEmpty) {
+        try {
+          await _supabase.storage.from(StorageService.contractsBucket).remove([contractPath]);
+        } catch (e) {
+          print('Error eliminando contrato en storage: $e');
+        }
+      }
+
+      // 2. Intentar eliminar vía RPC delete_user_by_admin (que elimina de auth.users y public.users)
+      bool deletedViaRpc = false;
+      try {
+        await _supabase.rpc('delete_user_by_admin', params: {'target_user_id': userId});
+        deletedViaRpc = true;
+      } catch (rpcErr) {
+        print('RPC delete_user_by_admin no disponible o falló: $rpcErr');
+      }
+
+      if (!deletedViaRpc) {
+        await _supabase.from('users').delete().eq('id', userId);
+      }
+
+      await fetchAllEmployees();
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = 'Error al eliminar empleado: $e';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>> createEmployeeWithEdgeFunction({
+    required String fullName,
+    required String email,
+    required String password,
+    required String ci,
+    required String role,
+    String? phone,
+    String? address,
+    String? department,
+    String? clientId,
+    String? employeeType,
+    Uint8List? contractBytes,
+    String? contractFilename,
+  }) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      // 1. Invocar la Edge Function 'create-employee' en Supabase
+      final response = await _supabase.functions.invoke(
+        'create-employee',
+        body: {
+          'full_name': fullName,
+          'email': email,
+          'password': password,
+          'ci': ci,
+          'role': role,
+          'phone': phone,
+          'address': address,
+          'department': department ?? 'General',
+          'client_id': clientId,
+          'employee_type': employeeType ?? 'field',
+        },
+      );
+
+      if (response.status != 200 && response.status != 201) {
+        final err = response.data?['error'] ?? 'Error creando empleado (${response.status})';
+        _error = err.toString();
+        _isLoading = false;
+        notifyListeners();
+        return {'success': false, 'error': _error};
+      }
+
+      final Map<String, dynamic> data = Map<String, dynamic>.from(response.data);
+      final newUserId = data['user']?['id']?.toString();
+
+      if (newUserId == null) {
+        throw Exception('No se recibió el ID del nuevo usuario desde la Edge Function');
+      }
+
+      // 2. Si se adjuntó contrato, subirlo al bucket privado
+      if (contractBytes != null && contractFilename != null) {
+        final storageService = StorageService();
+        final contractPath = await storageService.uploadContract(
+          userId: newUserId,
+          bytes: contractBytes,
+          filename: contractFilename,
+        );
+
+        if (contractPath != null) {
+          await _supabase.from('users').update({
+            'contract_url': contractPath,
+            'contract_filename': contractFilename,
+          }).eq('id', newUserId);
+        }
+      }
+
+      await fetchAllEmployees();
+      _isLoading = false;
+      notifyListeners();
+      return {'success': true, 'userId': newUserId};
+    } catch (e) {
+      _error = 'Error en creación de empleado: $e';
+      _isLoading = false;
+      notifyListeners();
+      return {'success': false, 'error': _error};
     }
   }
 
@@ -1461,6 +1771,7 @@ class AttendanceProvider extends ChangeNotifier {
         _officeLat = (response['office_lat'] as num?)?.toDouble();
         _officeLng = (response['office_lng'] as num?)?.toDouble();
         _officeRadius = (response['office_radius'] as num?)?.toInt() ?? 500;
+        _minMinutesBeforeCheckout = (response['min_minutes_before_checkout'] as num?)?.toInt() ?? 4;
       }
     } catch (e) {
       print('Error en fetchOfficeSettings: $e');

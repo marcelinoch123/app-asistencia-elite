@@ -65,10 +65,9 @@ class _DashboardEmployeeState extends State<DashboardEmployee> {
     if (authProvider.user != null) {
       final userId = authProvider.user!.id;
       await authProvider.fetchUserData(userId);
+      await attendanceProvider.autoCheckOutExpiredShifts(userId: userId);
       await attendanceProvider.fetchAttendances(userId);
-      if (authProvider.user!.isOffice) {
-        await attendanceProvider.fetchOfficeSettings();
-      }
+      await attendanceProvider.fetchOfficeSettings();
 
       // Cargar inmediatamente el día de hoy para que la tarjeta aparezca al instante
       final todayStr = _getDateString(DateTime.now());
@@ -707,46 +706,150 @@ class _DashboardEmployeeState extends State<DashboardEmployee> {
     final attendanceProvider = context.read<AttendanceProvider>();
 
     if (authProvider.user == null) return;
+    final isOffice = authProvider.user!.isOffice;
+
+    final shift = assignment['shift_data'] as Map<String, dynamic>?;
+    final startTimeStr = shift?['start_time'];
+    final endTimeStr = shift?['end_time'];
+
+    // Para empleados de CAMPO: validación de horario mínimo de salida
+    if (!isOffice && endTimeStr != null) {
+      final shiftEnd = _getShiftEndTime(endTimeStr, startTimeStr, DateTime.now());
+      if (shiftEnd != null) {
+        final minBefore = attendanceProvider.minMinutesBeforeCheckout;
+        final earliestExit = shiftEnd.subtract(Duration(minutes: minBefore));
+        if (DateTime.now().isBefore(earliestExit)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Debes esperar hasta las ${_formatTime(earliestExit)} para finalizar'),
+              backgroundColor: Colors.orange.shade800,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+          return;
+        }
+      }
+    }
+
+    Uint8List? processedBytes;
+
+    if (!isOffice) {
+      setState(() => _isProcessing = true);
+      try {
+        final picker = ImagePicker();
+        final photo = await picker.pickImage(
+          source: ImageSource.camera,
+          imageQuality: 80,
+          maxWidth: 1200,
+          maxHeight: 1200,
+          preferredCameraDevice: CameraDevice.front,
+        );
+
+        if (photo == null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Debes tomar una foto para finalizar'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          setState(() => _isProcessing = false);
+          return;
+        }
+
+        processedBytes = await _addWatermark(photo);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error capturando foto: $e'), backgroundColor: Colors.red),
+          );
+        }
+        setState(() => _isProcessing = false);
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _isProcessing = false);
+    }
 
     final TextEditingController notesController = TextEditingController();
+
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Confirmar Salida'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('¿Estás seguro de registrar tu salida?'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: notesController,
-              decoration: InputDecoration(
-                labelText: 'Observaciones / Incidencias (opcional)',
-                hintText: 'Ej. Salida anticipada autorizada, motivo...',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                isDense: true,
-                prefixIcon: const Icon(Icons.edit_note, size: 20),
-              ),
-              maxLines: 2,
+        child: SingleChildScrollView(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Confirmar Salida',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(ctx, false),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (processedBytes != null) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.memory(
+                      processedBytes,
+                      height: 280,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ] else ...[
+                  const Text('¿Estás seguro de registrar tu salida?'),
+                  const SizedBox(height: 12),
+                ],
+                TextField(
+                  controller: notesController,
+                  decoration: InputDecoration(
+                    labelText: 'Observaciones / Incidencias (opcional)',
+                    hintText: 'Ej. Salida normal, motivo...',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                    prefixIcon: const Icon(Icons.edit_note, size: 20),
+                  ),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    icon: const Icon(Icons.check_circle),
+                    label: const Text('Confirmar Salida'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFEF4444),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancelar'),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0F2744),
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Confirmar Salida'),
-          ),
-        ],
       ),
     );
 
@@ -759,6 +862,8 @@ class _DashboardEmployeeState extends State<DashboardEmployee> {
       final success = await attendanceProvider.checkOut(
         authProvider.user!.id,
         assignment['shift_id'],
+        photo: processedBytes,
+        isOffice: isOffice,
         notes: notesText.isEmpty ? null : notesText,
       );
 
@@ -810,7 +915,7 @@ class _DashboardEmployeeState extends State<DashboardEmployee> {
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Salida registrada'),
+              content: Text('Salida registrada con éxito'),
               backgroundColor: Colors.green,
               duration: Duration(seconds: 3),
             ),
@@ -826,8 +931,9 @@ class _DashboardEmployeeState extends State<DashboardEmployee> {
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(attendanceProvider.error ?? 'Error'),
+            content: Text(attendanceProvider.error ?? 'Error al registrar salida'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -1703,6 +1809,26 @@ class _DashboardEmployeeState extends State<DashboardEmployee> {
     final m = int.tryParse(parts[1]);
     if (h == null || m == null) return null;
     return DateTime(day.year, day.month, day.day, h, m);
+  }
+
+  DateTime? _getShiftEndTime(dynamic endTimeStr, dynamic startTimeStr, DateTime day) {
+    if (endTimeStr == null) return null;
+    final parts = endTimeStr.toString().split(':');
+    if (parts.length < 2) return null;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null) return null;
+    var shiftEnd = DateTime(day.year, day.month, day.day, h, m);
+    if (startTimeStr != null) {
+      final sParts = startTimeStr.toString().split(':');
+      if (sParts.length >= 2) {
+        final sH = int.tryParse(sParts[0]);
+        if (sH != null && h < sH) {
+          shiftEnd = shiftEnd.add(const Duration(days: 1));
+        }
+      }
+    }
+    return shiftEnd;
   }
 
   String _formatTimeStr(dynamic time) {

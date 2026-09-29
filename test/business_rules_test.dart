@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:app_asistencia_elite/models/attendance_model.dart';
+import 'package:app_asistencia_elite/models/user_model.dart';
 
 void main() {
   group('Pruebas de Reglas de Negocio - Asistencia y Descuentos', () {
@@ -261,6 +262,122 @@ void main() {
 
       final total = countAbsencesSimulated(assignedDays);
       expect(total, equals(2)); // Exactamente 2 faltas (días 4 y 5)
+    });
+
+    test('AttendanceModel mapea checkOutPhotoUrl, checkOutPhotoMissing y autoCheckOut', () {
+      final map = {
+        'id': 'test-checkout-1',
+        'user_id': 'user-456',
+        'date': '2026-09-29',
+        'status': 'on_time',
+        'check_in': '2026-09-29T12:00:00Z',
+        'check_out': '2026-09-29T20:00:00Z',
+        'check_out_photo_url': 'https://supabase.co/storage/v1/object/public/photos/checkout.jpg',
+        'check_out_photo_missing': false,
+        'auto_check_out': true,
+      };
+
+      final model = AttendanceModel.fromMap(map);
+      expect(model.checkOutPhotoUrl, equals('https://supabase.co/storage/v1/object/public/photos/checkout.jpg'));
+      expect(model.checkOutPhotoMissing, isFalse);
+      expect(model.autoCheckOut, isTrue);
+
+      final serialized = model.toMap();
+      expect(serialized['check_out_photo_url'], equals('https://supabase.co/storage/v1/object/public/photos/checkout.jpg'));
+      expect(serialized['check_out_photo_missing'], isFalse);
+      expect(serialized['auto_check_out'], isTrue);
+    });
+
+    test('Regla de salida mínima: no permitir finalizar antes de 4 min del fin de turno', () {
+      const minMinutesBeforeCheckout = 4;
+      final shiftEnd = DateTime(2026, 9, 29, 19, 0); // 19:00
+      final earliestAllowed = shiftEnd.subtract(const Duration(minutes: minMinutesBeforeCheckout)); // 18:56
+
+      expect(earliestAllowed.hour, equals(18));
+      expect(earliestAllowed.minute, equals(56));
+
+      // Intento a las 18:50 (muy temprano -> bloqueado)
+      final earlyAttempt = DateTime(2026, 9, 29, 18, 50);
+      expect(earlyAttempt.isBefore(earliestAllowed), isTrue);
+
+      // Intento a las 18:55 (1 minuto antes del límite -> bloqueado)
+      final closeAttempt = DateTime(2026, 9, 29, 18, 55);
+      expect(closeAttempt.isBefore(earliestAllowed), isTrue);
+
+      // Intento a las 18:56 (exacto -> permitido)
+      final allowedAttempt = DateTime(2026, 9, 29, 18, 56);
+      expect(allowedAttempt.isBefore(earliestAllowed), isFalse);
+
+      // Intento a las 19:05 (después del turno -> permitido)
+      final afterShiftAttempt = DateTime(2026, 9, 29, 19, 5);
+      expect(afterShiftAttempt.isBefore(earliestAllowed), isFalse);
+    });
+
+    test('Turno nocturno: cálculo correcto de fin de turno al día siguiente', () {
+      const startTimeStr = '22:00';
+      const endTimeStr = '06:00';
+      final assignedDate = DateTime(2026, 9, 29);
+
+      final startParts = startTimeStr.split(':');
+      final endParts = endTimeStr.split(':');
+      final startH = int.parse(startParts[0]);
+      final endH = int.parse(endParts[0]);
+      final endM = int.parse(endParts[1]);
+
+      var scheduledEnd = DateTime(assignedDate.year, assignedDate.month, assignedDate.day, endH, endM);
+      if (endH < startH) {
+        scheduledEnd = scheduledEnd.add(const Duration(days: 1));
+      }
+
+      // Debe ser el 30 de sep a las 06:00
+      expect(scheduledEnd.year, equals(2026));
+      expect(scheduledEnd.month, equals(9));
+      expect(scheduledEnd.day, equals(30));
+      expect(scheduledEnd.hour, equals(6));
+      expect(scheduledEnd.minute, equals(0));
+
+      // Salida más temprana permitida (4 min antes -> 05:56 del 30 de sep)
+      final earliestAllowed = scheduledEnd.subtract(const Duration(minutes: 4));
+      expect(earliestAllowed.day, equals(30));
+      expect(earliestAllowed.hour, equals(5));
+      expect(earliestAllowed.minute, equals(56));
+    });
+
+    test('UserModel mapea correctamente ci, contract_url, status y termination_date', () {
+      final userMap = {
+        'id': 'usr-999',
+        'email': 'carlos@empresa.com',
+        'name': 'Carlos Mendoza',
+        'full_name': 'Carlos Mendoza',
+        'role': 'employee',
+        'department': 'Limpieza',
+        'employee_type': 'field',
+        'ci': '5432100 LP',
+        'contract_url': 'usr-999/contrato_12345.pdf',
+        'contract_filename': 'contrato_laboral_carlos.pdf',
+        'status': 'inactive',
+        'is_active': false,
+        'termination_date': '2026-09-29T18:00:00Z',
+        'termination_reason': 'Fin de contrato por temporada',
+        'created_at': '2026-01-01T00:00:00Z',
+      };
+
+      final user = UserModel.fromMap(userMap);
+      expect(user.id, equals('usr-999'));
+      expect(user.ci, equals('5432100 LP'));
+      expect(user.contractUrl, equals('usr-999/contrato_12345.pdf'));
+      expect(user.contractFilename, equals('contrato_laboral_carlos.pdf'));
+      expect(user.status, equals('inactive'));
+      expect(user.isActive, isFalse);
+      expect(user.terminationDate, isNotNull);
+      expect(user.terminationReason, equals('Fin de contrato por temporada'));
+
+      final serialized = user.toMap();
+      expect(serialized['ci'], equals('5432100 LP'));
+      expect(serialized['contract_url'], equals('usr-999/contrato_12345.pdf'));
+      expect(serialized['status'], equals('inactive'));
+      expect(serialized['is_active'], isFalse);
+      expect(serialized['termination_reason'], equals('Fin de contrato por temporada'));
     });
   });
 }

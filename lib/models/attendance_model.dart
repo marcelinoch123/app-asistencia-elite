@@ -16,6 +16,9 @@ class AttendanceModel {
   final String? shiftId;
   final DateTime createdAt;
   final String? notes;
+  final String? checkOutPhotoUrl;
+  final bool checkOutPhotoMissing;
+  final bool autoCheckOut;
 
   AttendanceModel({
     required this.id,
@@ -35,6 +38,9 @@ class AttendanceModel {
     this.shiftId,
     required this.createdAt,
     this.notes,
+    this.checkOutPhotoUrl,
+    this.checkOutPhotoMissing = false,
+    this.autoCheckOut = false,
   });
 
   factory AttendanceModel.fromMap(Map<String, dynamic> map) {
@@ -62,6 +68,9 @@ class AttendanceModel {
           ? DateTime.parse(map['created_at']).toLocal()
           : DateTime.now(),
       notes: map['notes']?.toString(),
+      checkOutPhotoUrl: map['check_out_photo_url']?.toString(),
+      checkOutPhotoMissing: map['check_out_photo_missing'] == true,
+      autoCheckOut: map['auto_check_out'] == true,
     );
   }
 
@@ -84,6 +93,9 @@ class AttendanceModel {
       'shift_id': shiftId,
       'created_at': createdAt.toUtc().toIso8601String(),
       'notes': notes,
+      'check_out_photo_url': checkOutPhotoUrl,
+      'check_out_photo_missing': checkOutPhotoMissing,
+      'auto_check_out': autoCheckOut,
     };
   }
 }

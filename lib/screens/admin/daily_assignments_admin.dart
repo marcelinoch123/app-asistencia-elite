@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../config/supabase_client.dart';
+import '../../providers/attendance_provider.dart';
 import '../../widgets/custom_drawer.dart';
 
 enum DailyAssignmentStatus {
@@ -24,6 +26,9 @@ class DailyAssignmentItem {
   final dynamic checkIn;
   final dynamic checkOut;
   final String? rawStatus;
+  final bool autoCheckOut;
+  final bool checkOutPhotoMissing;
+  final String? checkOutPhotoUrl;
 
   DailyAssignmentItem({
     required this.id,
@@ -39,6 +44,9 @@ class DailyAssignmentItem {
     this.checkIn,
     this.checkOut,
     this.rawStatus,
+    this.autoCheckOut = false,
+    this.checkOutPhotoMissing = false,
+    this.checkOutPhotoUrl,
   });
 
   DailyAssignmentStatus get status {
@@ -114,6 +122,10 @@ class _DailyAssignmentsAdminState extends State<DailyAssignmentsAdmin> {
     try {
       final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
 
+      try {
+        await context.read<AttendanceProvider>().autoCheckOutExpiredShifts();
+      } catch (_) {}
+
       // Ejecutar consultas concurrentes hacia Supabase
       final results = await Future.wait([
         SupabaseConfig.client
@@ -122,7 +134,7 @@ class _DailyAssignmentsAdminState extends State<DailyAssignmentsAdmin> {
             .eq('assigned_date', dateStr),
         SupabaseConfig.client
             .from('attendances')
-            .select('user_id, shift_id, check_in, check_out, status')
+            .select('user_id, shift_id, check_in, check_out, status, check_out_photo_url, check_out_photo_missing, auto_check_out')
             .eq('date', dateStr),
         SupabaseConfig.client
             .from('users')
@@ -185,6 +197,10 @@ class _DailyAssignmentsAdminState extends State<DailyAssignmentsAdmin> {
             supervisor?['name']?.toString() ??
             'No asignado';
 
+        final autoCheckOut = att?['auto_check_out'] == true;
+        final checkOutPhotoMissing = att?['check_out_photo_missing'] == true;
+        final checkOutPhotoUrl = att?['check_out_photo_url']?.toString();
+
         items.add(DailyAssignmentItem(
           id: sa['id']?.toString() ?? '',
           assignedDate: sa['assigned_date']?.toString() ?? dateStr,
@@ -199,6 +215,9 @@ class _DailyAssignmentsAdminState extends State<DailyAssignmentsAdmin> {
           checkIn: att?['check_in'],
           checkOut: att?['check_out'],
           rawStatus: att?['status']?.toString(),
+          autoCheckOut: autoCheckOut,
+          checkOutPhotoMissing: checkOutPhotoMissing,
+          checkOutPhotoUrl: checkOutPhotoUrl,
         ));
       }
 
@@ -655,6 +674,54 @@ class _DailyAssignmentsAdminState extends State<DailyAssignmentsAdmin> {
                         color: Color(0xFF0F2744),
                       ),
                     ),
+                    if (item.autoCheckOut) ...[
+                      const SizedBox(width: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade100,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'Auto',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.amber.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (item.checkOutPhotoMissing) ...[
+                      const SizedBox(width: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade100,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'Sin foto',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.red.shade900,
+                          ),
+                        ),
+                      ),
+                    ] else if (item.checkOutPhotoUrl != null && item.checkOutPhotoUrl!.isNotEmpty) ...[
+                      const SizedBox(width: 2),
+                      IconButton(
+                        icon: const Icon(Icons.camera_alt, size: 15, color: Color(0xFF0051D5)),
+                        tooltip: 'Ver foto de salida',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => _showPhotoDialog(
+                          item.checkOutPhotoUrl!,
+                          'Foto de Salida - ${item.employeeName}',
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -824,6 +891,60 @@ class _DailyAssignmentsAdminState extends State<DailyAssignmentsAdmin> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF0F2744),
                 foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPhotoDialog(String photoUrl, String title) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+            ),
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+              child: Image.network(
+                photoUrl,
+                fit: BoxFit.cover,
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return const SizedBox(
+                    height: 250,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) => const SizedBox(
+                  height: 200,
+                  child: Center(
+                    child: Text('No se pudo cargar la foto'),
+                  ),
+                ),
               ),
             ),
           ],

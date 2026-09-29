@@ -123,6 +123,7 @@ class _ReportsAdminState extends State<ReportsAdmin> {
       }
 
       final attProvider = context.read<AttendanceProvider>();
+      await attProvider.autoCheckOutExpiredShifts();
       final summary = await attProvider.calculateMonthlySummary(
         _selectedEmployeeId!,
         _selectedMonth,
@@ -257,6 +258,10 @@ class _ReportsAdminState extends State<ReportsAdmin> {
 
           final status = lateMin > 0 ? 'Tarde' : 'Presente';
 
+          final autoCheckOut = matchingAtt['auto_check_out'] == true;
+          final checkOutPhotoMissing = matchingAtt['check_out_photo_missing'] == true;
+          final checkOutPhotoUrl = matchingAtt['check_out_photo_url'] as String?;
+
           details.add(DailyReportDetail(
             dateStr: dateStr,
             date: currentDay,
@@ -269,6 +274,9 @@ class _ReportsAdminState extends State<ReportsAdmin> {
             shiftSchedule: shiftSchedule,
             coordinates: coordinates,
             discount: lateFee,
+            autoCheckOut: autoCheckOut,
+            checkOutPhotoMissing: checkOutPhotoMissing,
+            checkOutPhotoUrl: checkOutPhotoUrl,
           ));
         } else {
           String status;
@@ -1070,7 +1078,62 @@ class _ReportsAdminState extends State<ReportsAdmin> {
                         ),
                       ),
                       DataCell(Text(detail.checkIn)),
-                      DataCell(Text(detail.checkOut)),
+                      DataCell(
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(detail.checkOut),
+                            if (detail.autoCheckOut) ...[
+                              const SizedBox(width: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'Auto',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.amber.shade900,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (detail.checkOutPhotoMissing) ...[
+                              const SizedBox(width: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'Sin foto',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red.shade900,
+                                  ),
+                                ),
+                              ),
+                            ] else if (detail.checkOutPhotoUrl != null && detail.checkOutPhotoUrl!.isNotEmpty) ...[
+                              const SizedBox(width: 2),
+                              IconButton(
+                                icon: const Icon(Icons.camera_alt, size: 16, color: Color(0xFF0051D5)),
+                                tooltip: 'Ver foto de salida',
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                onPressed: () => _showPhotoDialog(
+                                  detail.checkOutPhotoUrl!,
+                                  'Foto de Salida - ${detail.dateStr}',
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                       DataCell(
                         Text(
                           detail.lateMinutes > 0 ? '${detail.lateMinutes} min' : '-',
@@ -1243,6 +1306,60 @@ class _ReportsAdminState extends State<ReportsAdmin> {
             textAlign: TextAlign.center,
           ),
         ],
+      ),
+    );
+  }
+
+  void _showPhotoDialog(String photoUrl, String title) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+            ),
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+              child: Image.network(
+                photoUrl,
+                fit: BoxFit.cover,
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return const SizedBox(
+                    height: 250,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) => const SizedBox(
+                  height: 200,
+                  child: Center(
+                    child: Text('No se pudo cargar la foto'),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

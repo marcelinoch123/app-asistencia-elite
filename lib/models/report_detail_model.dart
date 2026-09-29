@@ -10,6 +10,9 @@ class DailyReportDetail {
   final String shiftSchedule;
   final String coordinates;
   final double discount;
+  final bool autoCheckOut;
+  final bool checkOutPhotoMissing;
+  final String? checkOutPhotoUrl;
 
   DailyReportDetail({
     required this.dateStr,
@@ -23,5 +26,8 @@ class DailyReportDetail {
     this.shiftSchedule = '—',
     this.coordinates = '—',
     this.discount = 0.0,
+    this.autoCheckOut = false,
+    this.checkOutPhotoMissing = false,
+    this.checkOutPhotoUrl,
   });
 }

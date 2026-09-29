@@ -12,6 +12,12 @@ class UserModel {
   final String employeeType;
   final bool isActive;
   final DateTime createdAt;
+  final String? ci;
+  final String? contractUrl;
+  final String? contractFilename;
+  final String status;
+  final DateTime? terminationDate;
+  final String? terminationReason;
 
   UserModel({
     required this.id,
@@ -27,9 +33,18 @@ class UserModel {
     this.employeeType = 'field',
     this.isActive = true,
     required this.createdAt,
+    this.ci,
+    this.contractUrl,
+    this.contractFilename,
+    this.status = 'active',
+    this.terminationDate,
+    this.terminationReason,
   });
 
   factory UserModel.fromMap(Map<String, dynamic> map) {
+    final statusVal = map['status']?.toString() ??
+        ((map['is_active'] == false) ? 'inactive' : 'active');
+
     return UserModel(
       id: map['id']?.toString() ?? '',
       email: map['email']?.toString() ?? '',
@@ -42,10 +57,18 @@ class UserModel {
       clientId: map['client_id']?.toString(),
       service: map['service']?.toString(),
       employeeType: map['employee_type']?.toString() ?? 'field',
-      isActive: map['is_active'] is bool ? map['is_active'] : true,
+      isActive: statusVal == 'active',
       createdAt: map['created_at'] != null
           ? DateTime.tryParse(map['created_at'].toString()) ?? DateTime.now()
           : DateTime.now(),
+      ci: map['ci']?.toString(),
+      contractUrl: map['contract_url']?.toString(),
+      contractFilename: map['contract_filename']?.toString(),
+      status: statusVal,
+      terminationDate: map['termination_date'] != null
+          ? DateTime.tryParse(map['termination_date'].toString())
+          : null,
+      terminationReason: map['termination_reason']?.toString(),
     );
   }
 
@@ -63,8 +86,14 @@ class UserModel {
       'client_id': clientId,
       'service': service,
       'employee_type': employeeType,
-      'is_active': isActive,
+      'is_active': status == 'active',
       'created_at': createdAt.toIso8601String(),
+      'ci': ci,
+      'contract_url': contractUrl,
+      'contract_filename': contractFilename,
+      'status': status,
+      'termination_date': terminationDate?.toIso8601String(),
+      'termination_reason': terminationReason,
     };
   }
 
