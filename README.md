@@ -1,17 +1,23 @@
-# app_asistencia_elite
+# App de Control de Asistencia - Elite Multiservicios
 
-A new Flutter project.
+Aplicación desarrollada en Flutter para la gestión de asistencia, turnos y cálculo de nómina del personal.
 
-## Getting Started
+## Stack Tecnológico
+- **Frontend:** Flutter (Dart)
+- **Backend / Base de Datos:** Supabase (PostgreSQL)
+- **Reportes:** Generación de archivos Excel (`.xlsx`)
 
-This project is a starting point for a Flutter application.
+## Características Principales
+- Registro de entrada y salida.
+- Gestión de empleados (contratos, bajas).
+- Asignación de turnos y visualización en mapa.
+- Cálculo automático de tardanzas, faltas y tolerancias.
+- Generación de resúmenes mensuales de descuentos.
 
-A few resources to get you started if this is your first Flutter project:
+##  Retos Técnicos Resueltos
+- **Manejo de fechas:** Implementé normalización de fechas en las consultas a Supabase para evitar errores de cálculo en días con turnos asignados.
+- **Lógica de negocio:** Desarrollo de la lógica para calcular multas por tardanza y faltas, excluyendo domingos y días sin turno.
+- **Exportación de datos:** Integración de la librería `excel` para generar reportes con fórmulas y coordenadas de logueo.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Autor
+Juan Antonio Barja S - Estudiante de Ingeniería de Sistemas.
